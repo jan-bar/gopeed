@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -27,14 +28,42 @@ func main() {
 	path := flag.String("D", dir, "Download file path")
 	index := flag.String("I", "", "Select file indexes to download")
 	extra := flag.String("E", "", "Extra options for the protocol")
+	proxy := flag.String("P", "", "Proxy URL")
 	connections := flag.Int("C", 16, "Concurrent connections")
 	autoTorrent := flag.Bool("A", false, "Auto create a new task for the torrent file")
 	overwrite := flag.Bool("O", false, "Overwrite existing file")
+	skipVerify := flag.Bool("K", false, "Skip verify cert")
 	flag.Parse()
 
-	url := flag.Arg(0)
-	if url == "" {
+	reqUrl := flag.Arg(0)
+	if reqUrl == "" {
 		panic("url is empty")
+	}
+
+	if *overwrite {
+		err = os.RemoveAll(filepath.Join(*path, *file))
+		if err != nil {
+			panic(err)
+		}
+	}
+
+	var reqProxy *base.RequestProxy
+	if *proxy != "" {
+		u, err := url.Parse(*proxy)
+		if err != nil {
+			panic(err)
+		}
+
+		reqProxy = &base.RequestProxy{
+			Mode:   base.RequestProxyModeCustom,
+			Scheme: u.Scheme,
+			Host:   u.Host,
+		}
+
+		if pwd, ok := u.User.Password(); ok {
+			reqProxy.Pwd = pwd
+			reqProxy.Usr = u.User.Username()
+		}
 	}
 
 	var selectFiles []int
@@ -46,25 +75,16 @@ func main() {
 		}
 	}
 
-	var extraReq any
+	var reqExtra any
 	if *extra != "" {
-		if strings.Contains(url, `"trackers"`) {
-			req := new(bt.ReqExtra)
-			if json.Unmarshal([]byte(*extra), req) == nil {
-				extraReq = req
-			}
+		var tmp any
+		if strings.Contains(*extra, `"trackers"`) {
+			tmp = new(bt.ReqExtra)
 		} else {
-			req := new(http.ReqExtra)
-			if json.Unmarshal([]byte(*extra), req) == nil {
-				extraReq = req
-			}
+			tmp = new(http.ReqExtra)
 		}
-	}
-
-	if *overwrite {
-		err = os.RemoveAll(filepath.Join(*path, *file))
-		if err != nil {
-			panic(err)
+		if json.Unmarshal([]byte(*extra), tmp) == nil {
+			reqExtra = tmp
 		}
 	}
 
@@ -113,26 +133,38 @@ func main() {
 		done = make(chan struct{}, 1)
 	)
 
-	_, err = download.Boot().
-		URL(url).
-		Listener(func(event *download.Event) {
-			switch event.Key {
-			case download.EventKeyProgress:
-				printProgress(event.Task, "downloading")
-			case download.EventKeyFinally:
-				if event.Err != nil {
-					printProgress(event.Task, "fail")
-					fmt.Printf("\nreason: %s\n", event.Err.Error())
-				} else {
-					printProgress(event.Task, "complete")
-					fmt.Printf("\nsaving file: %s\n",
-						filepath.FromSlash(event.Task.Meta.SingleFilepath()))
-				}
-				done <- struct{}{}
+	down := download.NewDownloader(nil)
+
+	err = down.Setup()
+	if err != nil {
+		panic(err)
+	}
+
+	down.Listener(func(event *download.Event) {
+		switch event.Key {
+		case download.EventKeyProgress:
+			printProgress(event.Task, "downloading")
+		case download.EventKeyFinally:
+			if event.Err != nil {
+				printProgress(event.Task, "fail")
+				fmt.Printf("\nreason: %s\n", event.Err.Error())
+			} else {
+				printProgress(event.Task, "complete")
+				fmt.Printf("\nsaving file: %s\n",
+					filepath.FromSlash(event.Task.Meta.SingleFilepath()))
 			}
-		}).
-		Extra(extraReq).
-		Create(&base.Options{
+			done <- struct{}{}
+		}
+	})
+
+	_, err = down.CreateDirect(
+		&base.Request{
+			URL:            reqUrl,
+			Extra:          reqExtra,
+			Proxy:          reqProxy,
+			SkipVerifyCert: *skipVerify,
+		},
+		&base.Options{
 			Name:        *file,
 			Path:        *path,
 			SelectFiles: selectFiles,
