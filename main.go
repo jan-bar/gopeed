@@ -1,17 +1,20 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
 	"flag"
+	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
-	"sync"
-	"time"
 
 	"github.com/GopeedLab/gopeed/pkg/base"
 	"github.com/GopeedLab/gopeed/pkg/download"
+	"github.com/GopeedLab/gopeed/pkg/protocol/bt"
 	"github.com/GopeedLab/gopeed/pkg/protocol/http"
-	"github.com/schollz/progressbar/v3"
+	"github.com/GopeedLab/gopeed/pkg/util"
 )
 
 func main() {
@@ -23,8 +26,10 @@ func main() {
 	file := flag.String("F", "", "Download file name")
 	path := flag.String("D", dir, "Download file path")
 	index := flag.String("I", "", "Select file indexes to download")
-	connections := flag.Int("C", 16, "Concurrent connections.")
+	extra := flag.String("E", "", "Extra options for the protocol")
+	connections := flag.Int("C", 16, "Concurrent connections")
 	autoTorrent := flag.Bool("A", false, "Auto create a new task for the torrent file")
+	overwrite := flag.Bool("O", false, "Overwrite existing file")
 	flag.Parse()
 
 	url := flag.Arg(0)
@@ -41,49 +46,92 @@ func main() {
 		}
 	}
 
+	var extraReq any
+	if *extra != "" {
+		if strings.Contains(url, `"trackers"`) {
+			req := new(bt.ReqExtra)
+			if json.Unmarshal([]byte(*extra), req) == nil {
+				extraReq = req
+			}
+		} else {
+			req := new(http.ReqExtra)
+			if json.Unmarshal([]byte(*extra), req) == nil {
+				extraReq = req
+			}
+		}
+	}
+
+	if *overwrite {
+		err = os.RemoveAll(filepath.Join(*path, *file))
+		if err != nil {
+			panic(err)
+		}
+	}
+
+	const progressWidth = 20
+
 	var (
-		sMax sync.Once
+		sb = bytes.NewBuffer(make([]byte, 0, 128))
+
+		lastLineLen   = 0
+		printProgress = func(task *download.Task, title string) {
+			var (
+				total int64
+				rate  float64
+			)
+
+			if task.Meta.Res != nil && task.Meta.Res.Size > 0 {
+				total = task.Meta.Res.Size
+				rate = float64(task.Progress.Downloaded) / float64(task.Meta.Res.Size)
+			}
+
+			fmt.Fprintf(sb, "\r%s [", title)
+
+			i := 0
+			for ; i < int(progressWidth*rate); i++ {
+				sb.WriteString("■")
+			}
+			for ; i < progressWidth; i++ {
+				sb.WriteString("□")
+			}
+
+			fmt.Fprintf(sb, "] %.1f%%    %s/s    %s", rate*100,
+				util.ByteFmt(task.Progress.Speed),
+				util.ByteFmt(total))
+
+			if lastLineLen != 0 {
+				for i = lastLineLen - sb.Len(); i > 0; i-- {
+					sb.WriteByte(' ')
+				}
+			}
+
+			lastLineLen = sb.Len()
+			os.Stdout.Write(sb.Bytes())
+			sb.Reset()
+		}
+
 		done = make(chan struct{}, 1)
-		pBar = progressbar.NewOptions64(
-			-1,
-			progressbar.OptionSetDescription("downloading"),
-			progressbar.OptionSetWriter(os.Stderr),
-			progressbar.OptionShowBytes(true),
-			progressbar.OptionShowTotalBytes(true),
-			progressbar.OptionSetWidth(10),
-			progressbar.OptionThrottle(65*time.Millisecond),
-			progressbar.OptionShowCount(),
-			progressbar.OptionSpinnerType(34),
-			progressbar.OptionSetWidth(30),
-			progressbar.OptionSetRenderBlankState(true),
-			progressbar.OptionOnCompletion(func() {
-				os.Stderr.WriteString("\n")
-				done <- struct{}{}
-			}),
-		)
 	)
 
 	_, err = download.Boot().
 		URL(url).
 		Listener(func(event *download.Event) {
-			if event.Task == nil || event.Task.Meta.Res == nil {
-				return
-			}
-
-			sMax.Do(func() { pBar.ChangeMax64(event.Task.Meta.Res.Size) })
-
 			switch event.Key {
 			case download.EventKeyProgress:
-				pBar.Set64(event.Task.Progress.Downloaded)
+				printProgress(event.Task, "downloading")
 			case download.EventKeyFinally:
 				if event.Err != nil {
-					pBar.Describe("failed: " + event.Err.Error())
+					printProgress(event.Task, "fail")
+					fmt.Printf("\nreason: %s\n", event.Err.Error())
 				} else {
-					pBar.Describe("completed")
+					printProgress(event.Task, "complete")
+					fmt.Printf("\nsaving file: %s\n",
+						filepath.FromSlash(event.Task.Meta.SingleFilepath()))
 				}
-				pBar.Finish()
+				done <- struct{}{}
 			}
 		}).
+		Extra(extraReq).
 		Create(&base.Options{
 			Name:        *file,
 			Path:        *path,

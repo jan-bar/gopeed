@@ -2,10 +2,7 @@ module github.com/jan-bar/gopeed
 
 go 1.25
 
-require (
-	github.com/GopeedLab/gopeed v1.8.2
-	github.com/schollz/progressbar/v3 v3.18.0
-)
+require github.com/GopeedLab/gopeed v1.8.2
 
 require (
 	dario.cat/mergo v1.0.0 // indirect
@@ -73,7 +70,6 @@ require (
 	github.com/mattn/go-ieproxy v0.0.12 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/minio/sha256-simd v1.0.1 // indirect
-	github.com/mitchellh/colorstring v0.0.0-20190213212951-d06e56a500db // indirect
 	github.com/mr-tron/base58 v1.2.0 // indirect
 	github.com/mschoch/smat v0.2.0 // indirect
 	github.com/multiformats/go-multihash v0.2.3 // indirect
@@ -103,7 +99,6 @@ require (
 	github.com/quic-go/quic-go v0.51.0 // indirect
 	github.com/refraction-networking/utls v1.6.7 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
-	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/rs/dnscache v0.0.0-20230804202142-fc85eb664529 // indirect
 	github.com/rs/zerolog v1.31.0 // indirect
 	github.com/sergi/go-diff v1.1.0 // indirect
@@ -125,7 +120,6 @@ require (
 	golang.org/x/net v0.39.0 // indirect
 	golang.org/x/sync v0.13.0 // indirect
 	golang.org/x/sys v0.32.0 // indirect
-	golang.org/x/term v0.31.0 // indirect
 	golang.org/x/text v0.24.0 // indirect
 	golang.org/x/time v0.8.0 // indirect
 	golang.org/x/tools v0.32.0 // indirect
