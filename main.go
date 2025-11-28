@@ -77,12 +77,17 @@ func main() {
 
 	var reqExtra any
 	if *extra != "" {
+		if d, err := os.ReadFile(*extra); err == nil {
+			*extra = string(d)
+		}
+
 		var tmp any
 		if strings.Contains(*extra, `"trackers"`) {
 			tmp = new(bt.ReqExtra)
 		} else {
 			tmp = new(http.ReqExtra)
 		}
+
 		if json.Unmarshal([]byte(*extra), tmp) == nil {
 			reqExtra = tmp
 		}
