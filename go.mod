@@ -2,7 +2,7 @@ module github.com/jan-bar/gopeed
 
 go 1.25
 
-require github.com/GopeedLab/gopeed v1.8.2
+require github.com/GopeedLab/gopeed v1.8.3
 
 require (
 	dario.cat/mergo v1.0.0 // indirect
