@@ -95,6 +95,9 @@ func main() {
 
 	const progressWidth = 20
 
+	fmt.Print("\033[?25l")
+	defer fmt.Print("\033[?25h")
+
 	var (
 		sb = bytes.NewBuffer(make([]byte, 0, 128))
 
@@ -110,7 +113,9 @@ func main() {
 				rate = float64(task.Progress.Downloaded) / float64(task.Meta.Res.Size)
 			}
 
-			fmt.Fprintf(sb, "\r%s [", title)
+			sb.WriteByte('\r')
+			sb.WriteString(title)
+			sb.WriteString(" [")
 
 			i := 0
 			for ; i < int(progressWidth*rate); i++ {
@@ -120,9 +125,12 @@ func main() {
 				sb.WriteString("□")
 			}
 
-			fmt.Fprintf(sb, "] %.1f%%    %s/s    %s", rate*100,
-				util.ByteFmt(task.Progress.Speed),
-				util.ByteFmt(total))
+			sb.WriteString("] ")
+			sb.WriteString(strconv.FormatFloat(rate*100, 'f', 1, 64))
+			sb.WriteString("%%    ")
+			sb.WriteString(util.ByteFmt(task.Progress.Speed))
+			sb.WriteString("/s    ")
+			sb.WriteString(util.ByteFmt(total))
 
 			if lastLineLen != 0 {
 				for i = lastLineLen - sb.Len(); i > 0; i-- {
@@ -131,6 +139,7 @@ func main() {
 			}
 
 			lastLineLen = sb.Len()
+			//goland:noinspection GoUnhandledErrorResult
 			os.Stdout.Write(sb.Bytes())
 			sb.Reset()
 		}
