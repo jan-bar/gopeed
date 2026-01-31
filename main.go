@@ -47,6 +47,21 @@ func main() {
 		}
 	}
 
+	if *proxy == "" {
+		for _, v := range []string{
+			"http_proxy",
+			"https_proxy",
+			"HTTP_PROXY",
+			"HTTPS_PROXY",
+		} {
+			u, ok := os.LookupEnv(v)
+			if ok {
+				*proxy = u
+				break
+			}
+		}
+	}
+
 	var reqProxy *base.RequestProxy
 	if *proxy != "" {
 		u, err := url.Parse(*proxy)
@@ -184,7 +199,7 @@ func main() {
 			SelectFiles: selectFiles,
 			Extra: &http.OptsExtra{
 				Connections: *connections,
-				AutoTorrent: *autoTorrent,
+				AutoTorrent: autoTorrent,
 			},
 		})
 	if err != nil {
