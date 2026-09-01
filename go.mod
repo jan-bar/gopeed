@@ -1,8 +1,8 @@
 module github.com/jan-bar/gopeed
 
-go 1.25
+go 1.27
 
-require github.com/GopeedLab/gopeed v1.9.0
+require github.com/GopeedLab/gopeed v1.9.3
 
 require (
 	dario.cat/mergo v1.0.0 // indirect
@@ -83,6 +83,7 @@ require (
 	github.com/mikelolasagasti/xz v1.0.1 // indirect
 	github.com/minio/minlz v1.0.1 // indirect
 	github.com/minio/sha256-simd v1.0.1 // indirect
+	github.com/monkeyWie/goed2k v0.0.0-20260317100435-7a7575cf2447 // indirect
 	github.com/mr-tron/base58 v1.2.0 // indirect
 	github.com/mschoch/smat v0.2.0 // indirect
 	github.com/multiformats/go-multihash v0.2.3 // indirect

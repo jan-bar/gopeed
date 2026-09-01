@@ -40,7 +40,7 @@ func main() {
 		panic("url is empty")
 	}
 
-	if *overwrite {
+	if *overwrite && *file != "" {
 		err = os.RemoveAll(filepath.Join(*path, *file))
 		if err != nil {
 			panic(err)
@@ -83,7 +83,7 @@ func main() {
 
 	var selectFiles []int
 	if *index != "" {
-		for _, v := range strings.Split(*index, ",") {
+		for v := range strings.SplitSeq(*index, ",") {
 			if i, err := strconv.Atoi(v); err == nil {
 				selectFiles = append(selectFiles, i)
 			}
