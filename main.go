@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	stdHttp "net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -33,6 +34,7 @@ func main() {
 	autoTorrent := flag.Bool("A", false, "Auto create a new task for the torrent file")
 	overwrite := flag.Bool("O", false, "Overwrite existing file")
 	skipVerify := flag.Bool("K", false, "Skip verify cert")
+	skipFile := flag.Bool("S", false, "Skip File Download")
 	flag.Parse()
 
 	reqUrl := flag.Arg(0)
@@ -41,7 +43,23 @@ func main() {
 	}
 
 	if *overwrite && *file != "" {
-		err = os.RemoveAll(filepath.Join(*path, *file))
+		fp := filepath.Join(*path, *file)
+
+		if *skipFile {
+			if fi, err := os.Stat(fp); err == nil {
+				sp, err := stdHttp.Head(reqUrl)
+				if err == nil {
+					err = sp.Body.Close()
+					s, _ := strconv.ParseInt(sp.Header.Get("Content-Length"), 10, 64)
+					if fi.Size() == s {
+						fmt.Println("Skipped")
+						return
+					}
+				}
+			}
+		}
+
+		err = os.RemoveAll(fp)
 		if err != nil {
 			panic(err)
 		}
