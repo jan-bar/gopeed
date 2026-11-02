@@ -66,12 +66,7 @@ func main() {
 	}
 
 	if *proxy == "" {
-		for _, v := range []string{
-			"http_proxy",
-			"https_proxy",
-			"HTTP_PROXY",
-			"HTTPS_PROXY",
-		} {
+		for _, v := range []string{"all_proxy", "ALL_PROXY", "http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY"} {
 			u, ok := os.LookupEnv(v)
 			if ok {
 				*proxy = u

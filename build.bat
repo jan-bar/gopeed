@@ -10,5 +10,5 @@ set GOOS=windows
 set GOAMD64=v3
 go build -ldflags "-s -w -buildid=" -buildvcs=false -trimpath -o gopeed.exe
 
-7za a -t7z -mx=9 gopeed_linux_amd64.7z gopeed
-7za a -t7z -mx=9 gopeed_windows_amd64.7z gopeed.exe
+7z a -t7z -mx=9 gopeed_linux_amd64.7z gopeed
+7z a -t7z -mx=9 gopeed_windows_amd64.7z gopeed.exe
