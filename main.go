@@ -42,26 +42,33 @@ func main() {
 		panic("url is empty")
 	}
 
-	if *overwrite && *file != "" {
-		fp := filepath.Join(*path, *file)
+	if *file != "" {
+		tp, tf := filepath.Split(*file)
+		if tp != "" {
+			*path, *file = tp, tf
+		}
 
-		if *skipFile {
-			if fi, err := os.Stat(fp); err == nil {
-				sp, err := stdHttp.Head(reqUrl)
-				if err == nil {
-					err = sp.Body.Close()
-					s, _ := strconv.ParseInt(sp.Header.Get("Content-Length"), 10, 64)
-					if fi.Size() == s {
-						fmt.Println("Skipped")
-						return
+		if *overwrite {
+			fp := filepath.Join(*path, *file)
+
+			if *skipFile {
+				if fi, err := os.Stat(fp); err == nil {
+					sp, err := stdHttp.Head(reqUrl)
+					if err == nil {
+						err = sp.Body.Close()
+						s, _ := strconv.ParseInt(sp.Header.Get("Content-Length"), 10, 64)
+						if fi.Size() == s {
+							fmt.Println("Skipped")
+							return
+						}
 					}
 				}
 			}
-		}
 
-		err = os.RemoveAll(fp)
-		if err != nil {
-			panic(err)
+			err = os.RemoveAll(fp)
+			if err != nil {
+				panic(err)
+			}
 		}
 	}
 
