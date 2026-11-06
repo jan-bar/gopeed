@@ -61,7 +61,7 @@ func main() {
 						s, _ := strconv.ParseInt(sp.Header.Get("Content-Length"), 10, 64)
 						if fi.Size() == s {
 							fmt.Println("Skipped")
-							return
+							os.Exit(3)
 						}
 					}
 				}
