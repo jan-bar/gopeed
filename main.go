@@ -10,13 +10,14 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/GopeedLab/gopeed/pkg/base"
 	"github.com/GopeedLab/gopeed/pkg/download"
 	"github.com/GopeedLab/gopeed/pkg/protocol/bt"
 	"github.com/GopeedLab/gopeed/pkg/protocol/ftp"
 	"github.com/GopeedLab/gopeed/pkg/protocol/http"
-	"github.com/schollz/progressbar/v3"
+	"github.com/cheggaaa/pb/v3"
 	"golang.org/x/net/http/httpproxy"
 )
 
@@ -160,32 +161,35 @@ func main() {
 	}
 
 	done := make(chan struct{}, 1)
-	bar := progressbar.NewOptions64(-2,
-		progressbar.OptionSetDescription("downloading"),
-		progressbar.OptionShowBytes(true),
-		progressbar.OptionSetElapsedTime(true),
-		progressbar.OptionShowCount(),
-		progressbar.OptionShowElapsedTimeOnFinish(),
-		progressbar.OptionUseANSICodes(true),
-		progressbar.OptionSetTheme(progressbar.ThemeASCII),
-	)
+	bar := pb.New64(0).
+		SetWidth(100).
+		SetTemplateString(`{{string . "prefix"}} {{percent . "%.0f%%"}} {{bar . "[" "=" ">" "." "]"}} ({{counters . "%s/%s"}}, {{speed .}}) [{{etime .}}{{if and (not .IsFinished) (gt .Total 0)}}:{{rtime .}}{{end}}]`).
+		Set(pb.Bytes, true).
+		Set(pb.SIBytesPrefix, true).
+		Set(pb.Color, false).
+		Set(pb.Static, true).
+		Set(pb.TimeRound, time.Second).
+		Set("prefix", "downloading").
+		SetWriter(os.Stdout).
+		Start()
 	down.Listener(func(event *download.Event) {
-		if bar.GetMax64() < 0 && event.Task.Meta.Res != nil && event.Task.Meta.Res.Size > 0 {
-			bar.ChangeMax64(event.Task.Meta.Res.Size)
+		if bar.Total() == 0 && event.Task.Meta.Res != nil && event.Task.Meta.Res.Size > 0 {
+			bar.SetTotal(event.Task.Meta.Res.Size)
 		}
 		if event.Task.Progress != nil {
-			bar.Set64(event.Task.Progress.Downloaded)
+			bar.SetCurrent(event.Task.Progress.Downloaded)
 		}
 		if event.Key == download.EventKeyFinally {
 			if event.Err != nil {
-				bar.Describe("fail")
+				bar.Set("prefix", "fail").Finish().Write()
 				fmt.Printf("\nreason: %s\n", event.Err.Error())
 			} else {
-				bar.Describe("complete")
+				bar.Set("prefix", "complete").Finish().Write()
 				fmt.Printf("\nsaving file: %s\n", filepath.Clean(event.Task.Meta.SingleFilepath()))
 			}
-			bar.Finish()
 			done <- struct{}{}
+		} else {
+			bar.Write()
 		}
 	})
 
