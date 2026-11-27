@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/tls"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -45,36 +46,6 @@ func main() {
 		panic("url is empty")
 	}
 
-	if *file != "" {
-		tp, tf := filepath.Split(*file)
-		if tp != "" {
-			*path, *file = tp, tf
-		}
-
-		if *overwrite {
-			fp := filepath.Join(*path, *file)
-
-			if *skipFile {
-				if fi, err := os.Stat(fp); err == nil {
-					sp, err := stdHttp.Head(reqUrl)
-					if err == nil {
-						err = sp.Body.Close()
-						s, _ := strconv.ParseInt(sp.Header.Get("Content-Length"), 10, 64)
-						if fi.Size() == s {
-							fmt.Println("Skipped")
-							os.Exit(3)
-						}
-					}
-				}
-			}
-
-			err = os.RemoveAll(fp)
-			if err != nil {
-				panic(err)
-			}
-		}
-	}
-
 	var pURL *url.URL
 	if *proxy == "" {
 		getEnvAny := func(names ...string) string {
@@ -105,6 +76,24 @@ func main() {
 		pURL, err = url.Parse(*proxy)
 		if err != nil {
 			panic(err)
+		}
+	}
+
+	var info *metadata
+	if *file != "" {
+		tp, tf := filepath.Split(*file)
+		if tp != "" {
+			*path, *file = tp, tf
+		}
+
+		fp := filepath.Join(*path, *file)
+		if *skipFile && headFile(reqUrl, fp, pURL, *skipVerify, &info) {
+			fmt.Println("Skipped")
+			os.Exit(3)
+		}
+		if *overwrite {
+			err = os.RemoveAll(fp)
+			err = os.Remove(fp + ".json")
 		}
 	}
 
@@ -184,8 +173,14 @@ func main() {
 				bar.Set("prefix", "fail").Finish().Write()
 				fmt.Printf("\nreason: %s\n", event.Err.Error())
 			} else {
+				fp := filepath.Clean(event.Task.Meta.SingleFilepath())
+				if info != nil {
+					if err := saveFileMetadata(fp, info); err != nil {
+						fmt.Printf("\nfailed to save file metadata: %s\n", err)
+					}
+				}
 				bar.Set("prefix", "complete").Finish().Write()
-				fmt.Printf("\nsaving file: %s\n", filepath.Clean(event.Task.Meta.SingleFilepath()))
+				fmt.Printf("\nsaving file: %s\n", fp)
 			}
 			done <- struct{}{}
 		} else {
@@ -213,4 +208,115 @@ func main() {
 		panic(err)
 	}
 	<-done
+}
+
+type metadata struct {
+	ETag          string `json:"etag"`
+	LastModified  string `json:"last-modified"`
+	ContentLength *int64 `json:"content-length"`
+	LocalSize     *int64 `json:"local-size"`
+}
+
+func headFile(u, fp string, proxy *url.URL, skipVerify bool, v **metadata) bool {
+	remote, err := getRemoteMetadata(u, proxy, skipVerify)
+	if err != nil {
+		return false
+	}
+	*v = &remote
+
+	fi, err := os.Stat(fp)
+	if err != nil || !fi.Mode().IsRegular() {
+		return false
+	}
+
+	data, err := os.ReadFile(fp + ".json")
+	if err != nil {
+		return false
+	}
+
+	var info metadata
+	if err = json.Unmarshal(data, &info); err != nil {
+		return false
+	}
+
+	if info.LocalSize != nil && fi.Size() != *info.LocalSize {
+		return false
+	}
+
+	if remote.ContentLength != nil {
+		if info.ContentLength != nil && *remote.ContentLength != *info.ContentLength {
+			return false
+		}
+	}
+
+	if remote.ETag != "" && info.ETag != "" && remote.ETag != info.ETag {
+		return false
+	}
+
+	if remote.LastModified != "" && info.LastModified != "" && remote.LastModified != info.LastModified {
+		return false
+	}
+
+	return (remote.ETag != "" && info.ETag != "") || (remote.LastModified != "" && info.LastModified != "")
+}
+
+func saveFileMetadata(fp string, info *metadata) error {
+	fi, err := os.Stat(fp)
+	if err != nil {
+		return err
+	}
+	if !fi.Mode().IsRegular() {
+		return fmt.Errorf("downloaded path is not a regular file: %s", fp)
+	}
+
+	localSize := fi.Size()
+	info.LocalSize = &localSize
+	data, err := json.MarshalIndent(info, "", "\t")
+	if err != nil {
+		return err
+	}
+
+	f := fp + ".json"
+	tmp := f + ".tmp"
+
+	if err = os.WriteFile(tmp, data, 0644); err != nil {
+		return err
+	}
+
+	return os.Rename(tmp, f)
+}
+
+func getRemoteMetadata(u string, proxy *url.URL, skipVerify bool) (metadata, error) {
+	req, err := stdHttp.NewRequest(stdHttp.MethodHead, u, nil)
+	if err != nil {
+		return metadata{}, err
+	}
+
+	c := &stdHttp.Client{Timeout: 10 * time.Second}
+	if proxy != nil || skipVerify {
+		c.Transport = &stdHttp.Transport{
+			Proxy: stdHttp.ProxyURL(proxy),
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: skipVerify,
+			},
+		}
+	}
+
+	resp, err := c.Do(req)
+	if err != nil {
+		return metadata{}, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != stdHttp.StatusOK {
+		return metadata{}, fmt.Errorf("unexpected HEAD status: %s", resp.Status)
+	}
+
+	info := metadata{
+		ETag:         resp.Header.Get("ETag"),
+		LastModified: resp.Header.Get("Last-Modified"),
+	}
+	if resp.ContentLength >= 0 {
+		info.ContentLength = &resp.ContentLength
+	}
+	return info, nil
 }
